@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>3Dビューア</title>
+    <style>
+        body { margin: 0; }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script>
+        // シーン
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xdddddd);
+
+        // カメラ
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(15, 15, 15);
+
+        // レンダラー
+        const renderer = new THREE.WebGLRenderer();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // ライト
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(20, 30, 40);
+        scene.add(directionalLight);
+
+        // 床
+        const ground = new THREE.Mesh(
+            new THREE.PlaneGeometry(50, 50),
+            new THREE.MeshStandardMaterial({ color: 0x888888, side: THREE.DoubleSide })
+        );
+        ground.rotation.x = -Math.PI / 2;
+        scene.add(ground);
+
+        // 家の作成
+        const house = new THREE.Group();
+        scene.add(house);
+
+        // 壁
+        const wallMaterial = new THREE.MeshStandardMaterial({ color: 0xdeb887 });
+        const wall = new THREE.Mesh(new THREE.BoxGeometry(10, 6, 8), wallMaterial);
+        wall.position.y = 3;
+        house.add(wall);
+
+        // 屋根
+        const roofMaterial = new THREE.MeshStandardMaterial({ color: 0x8b4513 });
+        const roof = new THREE.Mesh(new THREE.ConeGeometry(8, 4, 4), roofMaterial);
+        roof.position.y = 6 + 2;
+        roof.rotation.y = Math.PI / 4;
+        house.add(roof);
+
+        // ドア
+        const doorMaterial = new THREE.MeshStandardMaterial({ color: 0x654321 });
+        const door = new THREE.Mesh(new THREE.BoxGeometry(2, 4, 0.2), doorMaterial);
+        door.position.set(0, 2, 4.1);
+        house.add(door);
+
+        // コントロール
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+
+        // アニメーションループ
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        // ウィンドウリサイズ対応
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        animate();
+    </script>
+</body>
+</html>
