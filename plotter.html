@@ -37,11 +37,12 @@
         }
         #coordinates-table th, #coordinates-table td {
             border: 1px solid #ddd;
-            padding: 4px;
+            padding: 2px;
         }
         #coordinates-table th {
             background-color: #f2f2f2;
             text-align: center;
+            padding: 4px;
         }
         #coordinates-table td {
             text-align: right;
@@ -67,7 +68,7 @@
     <h1>座標プロットプログラム</h1>
     <p>
         キャンバスをクリックして点をプロットし、線で繋ぎます。<br>
-        <b>スクロール</b>で拡縮、<b>Shift + ドラッグ</b>でパンニングできます。<br>
+        <b>スクロール</b>で拡縮、<b>Shift + ドラッグ</b>でパンニングできます。点はドラッグ＆ドロップで移動できます。<br>
         3点以上プロットした後にダブルクリックすると、領域が閉じられ、次のクリックから新しい領域の入力を開始できます。<br>
         右クリックで全てのプロットをクリアします。<br>
         右の表の座標を<b>クリック</b>で点を選択、<b>Shift + クリック</b>で領域を複数選択できます。
@@ -112,7 +113,6 @@
         let regions = [{ points: [], isClosed: false }];
         let currentRegionIndex = 0;
         
-        // --- Selection and Highlight State ---
         let selectedRegions = new Set();
         let highlightedPoint = { regionIndex: -1, pointIndex: -1 };
         let draggedPoint = null;
@@ -120,7 +120,6 @@
         let pulseRadius = 8;
         let pulseDirection = 1;
 
-        // --- Pan and Zoom State ---
         let scale = 1.0;
         let panOffset = { x: canvas.width / 2, y: canvas.height / 2 };
         let isPanning = false;
@@ -140,7 +139,7 @@
 
         function findPointAt(canvasX, canvasY) {
             const worldPos = getTransformedPoint(canvasX, canvasY);
-            const tolerance = 10 / scale; // 10px tolerance, adjusted for scale
+            const tolerance = 10 / scale;
 
             for (let i = regions.length - 1; i >= 0; i--) {
                 for (let j = regions[i].points.length - 1; j >= 0; j--) {
@@ -157,21 +156,15 @@
         function drawGridAndAxes() {
             ctx.save();
             ctx.lineWidth = 1 / scale;
-            
             const tickLabelInterval = 5 * gridSpacing;
-
             ctx.strokeStyle = '#e0e0e0';
             const left = Math.floor(-panOffset.x / scale / gridSpacing) * gridSpacing;
             const right = left + (canvas.width + 1) / scale;
             const top = Math.floor(-panOffset.y / scale / gridSpacing) * gridSpacing;
             const bottom = top + (canvas.height + 1) / scale;
 
-            for (let x = left; x < right; x += gridSpacing) {
-                ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bottom); ctx.stroke();
-            }
-            for (let y = top; y < bottom; y += gridSpacing) {
-                ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(right, y); ctx.stroke();
-            }
+            for (let x = left; x < right; x += gridSpacing) { ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bottom); ctx.stroke(); }
+            for (let y = top; y < bottom; y += gridSpacing) { ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(right, y); ctx.stroke(); }
 
             ctx.strokeStyle = '#666';
             ctx.beginPath(); ctx.moveTo(left, 0); ctx.lineTo(right, 0); ctx.stroke();
@@ -183,77 +176,47 @@
             ctx.textBaseline = 'middle';
 
             for (let x = 0; x < right; x += gridSpacing) {
-                if (x % tickLabelInterval === 0 && x !== 0) {
-                    ctx.beginPath(); ctx.moveTo(x, -5/scale); ctx.lineTo(x, 5/scale); ctx.stroke();
-                    ctx.fillText(x, x, 15/scale);
-                }
+                if (x % tickLabelInterval === 0 && x !== 0) { ctx.beginPath(); ctx.moveTo(x, -5/scale); ctx.lineTo(x, 5/scale); ctx.stroke(); ctx.fillText(x, x, 15/scale); }
             }
-             for (let x = -gridSpacing; x > left; x -= gridSpacing) {
-                if (x % tickLabelInterval === 0) {
-                    ctx.beginPath(); ctx.moveTo(x, -5/scale); ctx.lineTo(x, 5/scale); ctx.stroke();
-                    ctx.fillText(x, x, 15/scale);
-                }
+            for (let x = -gridSpacing; x > left; x -= gridSpacing) {
+                if (x % tickLabelInterval === 0) { ctx.beginPath(); ctx.moveTo(x, -5/scale); ctx.lineTo(x, 5/scale); ctx.stroke(); ctx.fillText(x, x, 15/scale); }
             }
-            
             ctx.textAlign = 'right';
             for (let y = 0; y < bottom; y += gridSpacing) {
-                if (y % tickLabelInterval === 0 && y !== 0) {
-                     ctx.beginPath(); ctx.moveTo(-5/scale, y); ctx.lineTo(5/scale, y); ctx.stroke();
-                    ctx.fillText(-y, -10/scale, y);
-                }
+                if (y % tickLabelInterval === 0 && y !== 0) { ctx.beginPath(); ctx.moveTo(-5/scale, y); ctx.lineTo(5/scale, y); ctx.stroke(); ctx.fillText(-y, -10/scale, y); }
             }
-             for (let y = -gridSpacing; y > top; y -= gridSpacing) {
-                if (y % tickLabelInterval === 0) {
-                     ctx.beginPath(); ctx.moveTo(-5/scale, y); ctx.lineTo(5/scale, y); ctx.stroke();
-                    ctx.fillText(-y, -10/scale, y);
-                }
+            for (let y = -gridSpacing; y > top; y -= gridSpacing) {
+                if (y % tickLabelInterval === 0) { ctx.beginPath(); ctx.moveTo(-5/scale, y); ctx.lineTo(5/scale, y); ctx.stroke(); ctx.fillText(-y, -10/scale, y); }
             }
             ctx.fillText('0', -10/scale, 15/scale);
-            
             ctx.restore();
         }
 
         function animateHighlight() {
-            if (highlightedPoint.pointIndex === -1) {
-                highlightAnimationId = null;
-                return;
-            }
+            if (highlightedPoint.pointIndex === -1) { highlightAnimationId = null; return; }
             pulseRadius += (pulseDirection * 0.2);
-            if (pulseRadius > 12 || pulseRadius < 6) {
-                pulseDirection *= -1;
-            }
+            if (pulseRadius > 12 || pulseRadius < 6) pulseDirection *= -1;
             redraw();
             highlightAnimationId = requestAnimationFrame(animateHighlight);
         }
 
-        function startHighlightAnimation() {
-            if (highlightAnimationId === null) animateHighlight();
-        }
-        
-        function stopHighlightAnimation() {
-            if (highlightAnimationId !== null) {
-                cancelAnimationFrame(highlightAnimationId);
-                highlightAnimationId = null;
-            }
-        }
+        function startHighlightAnimation() { if (highlightAnimationId === null) animateHighlight(); }
+        function stopHighlightAnimation() { if (highlightAnimationId !== null) { cancelAnimationFrame(highlightAnimationId); highlightAnimationId = null; } }
 
         function redraw() {
             ctx.save();
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             ctx.translate(panOffset.x, panOffset.y);
             ctx.scale(scale, scale);
-
             drawGridAndAxes();
 
             regions.forEach((region, regionIndex) => {
                 if (region.points.length === 0) return;
                 const isSelected = selectedRegions.has(regionIndex);
-
                 ctx.beginPath();
                 ctx.moveTo(region.points[0].x, region.points[0].y);
                 for (let i = 1; i < region.points.length; i++) ctx.lineTo(region.points[i].x, region.points[i].y);
-                
-                ctx.lineWidth = (isSelected ? 2 : 1) / scale;
+                ctx.lineWidth = (isSelected ? 2.5 : 1) / scale;
                 if (region.isClosed) {
                     ctx.closePath();
                     ctx.fillStyle = isSelected ? 'rgba(255, 165, 0, 0.5)' : 'rgba(173, 216, 230, 0.5)';
@@ -271,7 +234,6 @@
                     ctx.arc(p.x, p.y, 5 / scale, 0, 2 * Math.PI);
                     ctx.fillStyle = 'red';
                     ctx.fill();
-
                     if (regionIndex === highlightedPoint.regionIndex && pointIndex === highlightedPoint.pointIndex) {
                         ctx.lineWidth = 2 / scale;
                         ctx.strokeStyle = 'rgba(255, 0, 221, 1)';
@@ -291,38 +253,22 @@
                     const row = document.createElement('tr');
                     row.dataset.regionIndex = regionIndex;
                     row.dataset.pointIndex = pointIndex;
-
-                    row.innerHTML = `
-                        <td style="text-align:center;">${regionIndex + 1}</td>
-                        <td style="text-align:center;">${pointIndex + 1}</td>
-                        <td contenteditable="true" data-coord="x">${p.x.toFixed(1)}</td>
-                        <td contenteditable="true" data-coord="y">${(-p.y).toFixed(1)}</td>
-                        <td contenteditable="true" data-coord="z">${(p.z || 0).toFixed(1)}</td>
-                    `;
-                    
+                    row.innerHTML = `<td style="text-align:center;">${regionIndex + 1}</td><td style="text-align:center;">${pointIndex + 1}</td><td contenteditable="true" data-coord="x">${p.x.toFixed(1)}</td><td contenteditable="true" data-coord="y">${(-p.y).toFixed(1)}</td><td contenteditable="true" data-coord="z">${(p.z || 0).toFixed(1)}</td>`;
                     if (selectedRegions.has(regionIndex)) row.classList.add('highlighted-row');
-                    
                     row.addEventListener('click', (e) => {
                         stopHighlightAnimation();
                         const newRegionIndex = parseInt(row.dataset.regionIndex);
-                        
                         if (e.shiftKey) {
-                            if (selectedRegions.has(newRegionIndex)) {
-                                selectedRegions.delete(newRegionIndex);
-                            } else {
-                                selectedRegions.add(newRegionIndex);
-                            }
+                            if (selectedRegions.has(newRegionIndex)) selectedRegions.delete(newRegionIndex); else selectedRegions.add(newRegionIndex);
                         } else {
                             selectedRegions.clear();
                             selectedRegions.add(newRegionIndex);
                         }
-
                         highlightedPoint = { regionIndex, pointIndex };
                         startHighlightAnimation();
                         redraw();
                         updateCoordinatesTable();
                     });
-
                     row.querySelectorAll('td[contenteditable="true"]').forEach(cell => {
                         cell.addEventListener('keydown', (e) => {
                             if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } 
@@ -336,7 +282,7 @@
                                 point[coord] = (coord === 'y') ? -newValue : newValue;
                                 redraw();
                             }
-                            updateCoordinatesTable(); // Re-render to format and clean input
+                            updateCoordinatesTable();
                         });
                     });
                     coordinatesTableBody.appendChild(row);
@@ -370,14 +316,12 @@
             reader.readAsText(file);
         }
 
-        csvInput.addEventListener('change', (e) => {
-            if (e.target.files[0]) handleFile(e.target.files[0]);
-            e.target.value = '';
-        });
+        csvInput.addEventListener('change', (e) => { if (e.target.files[0]) handleFile(e.target.files[0]); e.target.value = ''; });
 
         canvas.addEventListener('mousedown', (e) => {
-            const foundPoint = findPointAt(e.clientX, e.clientY);
-            if(e.shiftKey || e.button === 1) {
+            const canvasPos = getCanvasPoint(e);
+            const foundPoint = findPointAt(canvasPos.x, canvasPos.y);
+            if (e.shiftKey || e.button === 1) {
                 isPanning = true;
                 panStart = { x: e.clientX, y: e.clientY };
                 canvas.style.cursor = 'grabbing';
@@ -392,32 +336,24 @@
                 panOffset.x += e.clientX - panStart.x;
                 panOffset.y += e.clientY - panStart.y;
                 panStart = { x: e.clientX, y: e.clientY };
-                redraw();
             } else if (draggedPoint) {
-                const worldPos = getTransformedPoint(e.clientX, e.clientY);
+                const canvasPos = getCanvasPoint(e);
+                const worldPos = getTransformedPoint(canvasPos.x, canvasPos.y);
                 regions[draggedPoint.regionIndex].points[draggedPoint.pointIndex].x = worldPos.x;
                 regions[draggedPoint.regionIndex].points[draggedPoint.pointIndex].y = worldPos.y;
+            }
+            if(isPanning || draggedPoint) {
                 redraw();
                 updateCoordinatesTable();
             }
         });
 
-        canvas.addEventListener('mouseup', () => {
-            isPanning = false;
-            draggedPoint = null;
-            canvas.style.cursor = 'crosshair';
-        });
-        
-        canvas.addEventListener('mouseleave', () => {
-            isPanning = false;
-            draggedPoint = null;
-            canvas.style.cursor = 'crosshair';
-        });
+        canvas.addEventListener('mouseup', () => { isPanning = false; draggedPoint = null; canvas.style.cursor = 'crosshair'; });
+        canvas.addEventListener('mouseleave', () => { isPanning = false; draggedPoint = null; canvas.style.cursor = 'crosshair'; });
 
         canvas.addEventListener('wheel', (e) => {
             e.preventDefault();
-            const zoomIntensity = 0.1;
-            const zoom = Math.exp((e.deltaY < 0 ? 1 : -1) * zoomIntensity);
+            const zoom = Math.exp((e.deltaY < 0 ? 1 : -1) * 0.1);
             const mousePos = getCanvasPoint(e);
             const pointBeforeZoom = getTransformedPoint(mousePos.x, mousePos.y);
             scale *= zoom;
@@ -445,7 +381,8 @@
                 clickTimer = setTimeout(() => {
                     clickTimer = null;
                     if (isPanning || draggedPoint) return;
-                    const worldPos = getTransformedPoint(e.clientX, e.clientY);
+                    const canvasPos = getCanvasPoint(e);
+                    const worldPos = getTransformedPoint(canvasPos.x, canvasPos.y);
                     if (regions.length === 0 || (regions[currentRegionIndex] && regions[currentRegionIndex].isClosed) ) {
                         regions.push({ points: [], isClosed: false });
                         currentRegionIndex = regions.length - 1;
@@ -494,4 +431,3 @@
     </script>
 </body>
 </html>
-
