@@ -67,10 +67,10 @@
     <h1>座標プロットプログラム</h1>
     <p>
         キャンバスをクリックして点をプロットし、線で繋ぎます。<br>
-        <b>Ctrl + スクロール</b>で拡縮、<b>Shift + ドラッグ</b>でパンニングできます。<br>
+        <b>スクロール</b>で拡縮、<b>Shift + ドラッグ</b>でパンニングできます。<br>
         3点以上プロットした後にダブルクリックすると、領域が閉じられ、次のクリックから新しい領域の入力を開始できます。<br>
         右クリックで全てのプロットをクリアします。<br>
-        右の表の座標をクリックすると、対応する点と領域がハイライトされます。
+        右の表の座標を<b>クリック</b>で点を選択、<b>Shift + クリック</b>で領域を複数選択できます。
     </p>
     <div class="controls">
         <div class="file-importer">
@@ -111,9 +111,14 @@
         
         let regions = [{ points: [], isClosed: false }];
         let currentRegionIndex = 0;
-        let highlightedRegionIndex = -1;
-        let highlightedPointIndex = -1;
-        let clickTimer = null;
+        
+        // --- Selection and Highlight State ---
+        let selectedRegions = new Set();
+        let highlightedPoint = { regionIndex: -1, pointIndex: -1 };
+        let draggedPoint = null;
+        let highlightAnimationId = null;
+        let pulseRadius = 8;
+        let pulseDirection = 1;
 
         // --- Pan and Zoom State ---
         let scale = 1.0;
@@ -121,21 +126,32 @@
         let isPanning = false;
         let panStart = { x: 0, y: 0 };
         
+        let clickTimer = null;
         const gridSpacing = 20;
         
         function getCanvasPoint(event) {
             const rect = canvas.getBoundingClientRect();
-            return {
-                x: event.clientX - rect.left,
-                y: event.clientY - rect.top
-            };
+            return { x: event.clientX - rect.left, y: event.clientY - rect.top };
         }
 
         function getTransformedPoint(canvasX, canvasY) {
-            return {
-                x: (canvasX - panOffset.x) / scale,
-                y: (canvasY - panOffset.y) / scale
-            };
+            return { x: (canvasX - panOffset.x) / scale, y: (canvasY - panOffset.y) / scale };
+        }
+
+        function findPointAt(canvasX, canvasY) {
+            const worldPos = getTransformedPoint(canvasX, canvasY);
+            const tolerance = 10 / scale; // 10px tolerance, adjusted for scale
+
+            for (let i = regions.length - 1; i >= 0; i--) {
+                for (let j = regions[i].points.length - 1; j >= 0; j--) {
+                    const point = regions[i].points[j];
+                    const distance = Math.sqrt(Math.pow(point.x - worldPos.x, 2) + Math.pow(point.y - worldPos.y, 2));
+                    if (distance < tolerance) {
+                        return { regionIndex: i, pointIndex: j };
+                    }
+                }
+            }
+            return null;
         }
 
         function drawGridAndAxes() {
@@ -144,7 +160,6 @@
             
             const tickLabelInterval = 5 * gridSpacing;
 
-            // --- Grid ---
             ctx.strokeStyle = '#e0e0e0';
             const left = Math.floor(-panOffset.x / scale / gridSpacing) * gridSpacing;
             const right = left + (canvas.width + 1) / scale;
@@ -152,72 +167,44 @@
             const bottom = top + (canvas.height + 1) / scale;
 
             for (let x = left; x < right; x += gridSpacing) {
-                ctx.beginPath();
-                ctx.moveTo(x, top);
-                ctx.lineTo(x, bottom);
-                ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bottom); ctx.stroke();
             }
             for (let y = top; y < bottom; y += gridSpacing) {
-                ctx.beginPath();
-                ctx.moveTo(left, y);
-                ctx.lineTo(right, y);
-                ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(right, y); ctx.stroke();
             }
 
-            // --- Axes ---
             ctx.strokeStyle = '#666';
-            ctx.beginPath();
-            ctx.moveTo(left, 0);
-            ctx.lineTo(right, 0);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(0, top);
-            ctx.lineTo(0, bottom);
-            ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(left, 0); ctx.lineTo(right, 0); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(0, top); ctx.lineTo(0, bottom); ctx.stroke();
 
-            // --- Ticks and Labels ---
             ctx.fillStyle = '#333';
             ctx.font = `${10 / scale}px sans-serif`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
 
-            // X-axis ticks
             for (let x = 0; x < right; x += gridSpacing) {
                 if (x % tickLabelInterval === 0 && x !== 0) {
-                    ctx.beginPath();
-                    ctx.moveTo(x, -5/scale);
-                    ctx.lineTo(x, 5/scale);
-                    ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(x, -5/scale); ctx.lineTo(x, 5/scale); ctx.stroke();
                     ctx.fillText(x, x, 15/scale);
                 }
             }
              for (let x = -gridSpacing; x > left; x -= gridSpacing) {
                 if (x % tickLabelInterval === 0) {
-                    ctx.beginPath();
-                    ctx.moveTo(x, -5/scale);
-                    ctx.lineTo(x, 5/scale);
-                    ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(x, -5/scale); ctx.lineTo(x, 5/scale); ctx.stroke();
                     ctx.fillText(x, x, 15/scale);
                 }
             }
-
-            // Y-axis ticks
+            
             ctx.textAlign = 'right';
             for (let y = 0; y < bottom; y += gridSpacing) {
                 if (y % tickLabelInterval === 0 && y !== 0) {
-                     ctx.beginPath();
-                    ctx.moveTo(-5/scale, y);
-                    ctx.lineTo(5/scale, y);
-                    ctx.stroke();
+                     ctx.beginPath(); ctx.moveTo(-5/scale, y); ctx.lineTo(5/scale, y); ctx.stroke();
                     ctx.fillText(-y, -10/scale, y);
                 }
             }
              for (let y = -gridSpacing; y > top; y -= gridSpacing) {
                 if (y % tickLabelInterval === 0) {
-                     ctx.beginPath();
-                    ctx.moveTo(-5/scale, y);
-                    ctx.lineTo(5/scale, y);
-                    ctx.stroke();
+                     ctx.beginPath(); ctx.moveTo(-5/scale, y); ctx.lineTo(5/scale, y); ctx.stroke();
                     ctx.fillText(-y, -10/scale, y);
                 }
             }
@@ -226,11 +213,33 @@
             ctx.restore();
         }
 
+        function animateHighlight() {
+            if (highlightedPoint.pointIndex === -1) {
+                highlightAnimationId = null;
+                return;
+            }
+            pulseRadius += (pulseDirection * 0.2);
+            if (pulseRadius > 12 || pulseRadius < 6) {
+                pulseDirection *= -1;
+            }
+            redraw();
+            highlightAnimationId = requestAnimationFrame(animateHighlight);
+        }
+
+        function startHighlightAnimation() {
+            if (highlightAnimationId === null) animateHighlight();
+        }
+        
+        function stopHighlightAnimation() {
+            if (highlightAnimationId !== null) {
+                cancelAnimationFrame(highlightAnimationId);
+                highlightAnimationId = null;
+            }
+        }
 
         function redraw() {
             ctx.save();
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
             ctx.translate(panOffset.x, panOffset.y);
             ctx.scale(scale, scale);
 
@@ -238,21 +247,20 @@
 
             regions.forEach((region, regionIndex) => {
                 if (region.points.length === 0) return;
+                const isSelected = selectedRegions.has(regionIndex);
 
                 ctx.beginPath();
                 ctx.moveTo(region.points[0].x, region.points[0].y);
-                for (let i = 1; i < region.points.length; i++) {
-                    ctx.lineTo(region.points[i].x, region.points[i].y);
-                }
-
-                ctx.lineWidth = (regionIndex === highlightedRegionIndex ? 2 : 1) / scale;
+                for (let i = 1; i < region.points.length; i++) ctx.lineTo(region.points[i].x, region.points[i].y);
+                
+                ctx.lineWidth = (isSelected ? 2 : 1) / scale;
                 if (region.isClosed) {
                     ctx.closePath();
-                    ctx.fillStyle = regionIndex === highlightedRegionIndex ? 'rgba(255, 165, 0, 0.5)' : 'rgba(173, 216, 230, 0.5)';
+                    ctx.fillStyle = isSelected ? 'rgba(255, 165, 0, 0.5)' : 'rgba(173, 216, 230, 0.5)';
                     ctx.fill();
-                    ctx.strokeStyle = regionIndex === highlightedRegionIndex ? 'orange' : 'blue';
+                    ctx.strokeStyle = isSelected ? 'orange' : 'blue';
                 } else {
-                     ctx.strokeStyle = regionIndex === highlightedRegionIndex ? 'orange' : 'black';
+                     ctx.strokeStyle = isSelected ? 'orange' : 'black';
                 }
                 ctx.stroke();
             });
@@ -264,9 +272,11 @@
                     ctx.fillStyle = 'red';
                     ctx.fill();
 
-                    if (regionIndex === highlightedRegionIndex && pointIndex === highlightedPointIndex) {
-                        ctx.lineWidth = 3 / scale;
-                        ctx.strokeStyle = '#ff4500';
+                    if (regionIndex === highlightedPoint.regionIndex && pointIndex === highlightedPoint.pointIndex) {
+                        ctx.lineWidth = 2 / scale;
+                        ctx.strokeStyle = 'rgba(255, 0, 221, 1)';
+                        ctx.beginPath();
+                        ctx.arc(p.x, p.y, pulseRadius / scale, 0, 2 * Math.PI);
                         ctx.stroke();
                     }
                 });
@@ -285,54 +295,50 @@
                     row.innerHTML = `
                         <td style="text-align:center;">${regionIndex + 1}</td>
                         <td style="text-align:center;">${pointIndex + 1}</td>
-                        <td contenteditable="true" data-coord="x">${(p.x).toFixed(1)}</td>
+                        <td contenteditable="true" data-coord="x">${p.x.toFixed(1)}</td>
                         <td contenteditable="true" data-coord="y">${(-p.y).toFixed(1)}</td>
                         <td contenteditable="true" data-coord="z">${(p.z || 0).toFixed(1)}</td>
                     `;
                     
-                    if (regionIndex === highlightedRegionIndex && pointIndex === highlightedPointIndex) {
-                        row.classList.add('highlighted-row');
-                    }
-
+                    if (selectedRegions.has(regionIndex)) row.classList.add('highlighted-row');
+                    
                     row.addEventListener('click', (e) => {
-                        if (e.target.contentEditable !== 'true') {
-                           highlightedRegionIndex = regionIndex;
-                           highlightedPointIndex = pointIndex;
-                           redraw();
-                           updateCoordinatesTable();
+                        stopHighlightAnimation();
+                        const newRegionIndex = parseInt(row.dataset.regionIndex);
+                        
+                        if (e.shiftKey) {
+                            if (selectedRegions.has(newRegionIndex)) {
+                                selectedRegions.delete(newRegionIndex);
+                            } else {
+                                selectedRegions.add(newRegionIndex);
+                            }
+                        } else {
+                            selectedRegions.clear();
+                            selectedRegions.add(newRegionIndex);
                         }
+
+                        highlightedPoint = { regionIndex, pointIndex };
+                        startHighlightAnimation();
+                        redraw();
+                        updateCoordinatesTable();
                     });
 
-                    // Add blur event listeners to editable cells
                     row.querySelectorAll('td[contenteditable="true"]').forEach(cell => {
+                        cell.addEventListener('keydown', (e) => {
+                            if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } 
+                            else if (e.key === 'Escape') { e.preventDefault(); updateCoordinatesTable(); }
+                        });
                         cell.addEventListener('blur', (e) => {
                             const newValue = parseFloat(e.target.innerText);
-                            const coord = e.target.dataset.coord;
                             if (!isNaN(newValue)) {
-                                let point = regions[regionIndex].points[pointIndex];
-                                if (coord === 'y') {
-                                    point[coord] = -newValue; // Negate Y on input
-                                } else {
-                                    point[coord] = newValue;
-                                }
+                                const coord = e.target.dataset.coord;
+                                const point = regions[regionIndex].points[pointIndex];
+                                point[coord] = (coord === 'y') ? -newValue : newValue;
                                 redraw();
-                            } else {
-                                // Revert if input is not a number
-                                e.target.innerText = (coord === 'y' ? -regions[regionIndex].points[pointIndex][coord] : regions[regionIndex].points[pointIndex][coord] || 0).toFixed(1);
                             }
-                        });
-                        cell.addEventListener('keydown', (e) => {
-                            if (e.key === 'Enter') {
-                                e.preventDefault();
-                                e.target.blur();
-                            } else if (e.key === 'Escape') {
-                                e.preventDefault();
-                                e.target.innerText = (e.target.dataset.coord === 'y' ? -regions[regionIndex].points[pointIndex][e.target.dataset.coord] : regions[regionIndex].points[pointIndex][e.target.dataset.coord] || 0).toFixed(1);
-                                e.target.blur();
-                            }
+                            updateCoordinatesTable(); // Re-render to format and clean input
                         });
                     });
-
                     coordinatesTableBody.appendChild(row);
                 });
             });
@@ -341,38 +347,23 @@
         function handleFile(file) {
             const reader = new FileReader();
             reader.onload = (e) => {
-                const text = e.target.result;
-                const newRegion = { points: [], isClosed: true }; // CSVs are always closed
-                
-                const lines = text.split(/\r\n|\n/);
-                // Skip header if it exists
+                const newRegion = { points: [], isClosed: true };
+                const lines = e.target.result.split(/\r\n|\n/);
                 const startLine = (lines[0] && isNaN(parseFloat(lines[0].split(',')[0]))) ? 1 : 0;
-
                 for(let i = startLine; i < lines.length; i++) {
-                    const line = lines[i];
-                    if (!line.trim()) continue;
-                    const values = line.split(',').map(v => parseFloat(v.trim()));
+                    if (!lines[i].trim()) continue;
+                    const values = lines[i].split(',').map(v => parseFloat(v.trim()));
                     if (values.length >= 2 && !isNaN(values[0]) && !isNaN(values[1])) {
-                        const x = values[0];
-                        const y = -values[1]; // Negate Y for correct display
-                        const z = values.length > 2 ? values[2] : 0;
-                        newRegion.points.push({ x, y, z });
+                        newRegion.points.push({ x: values[0], y: -values[1], z: values[2] || 0 });
                     }
                 }
-
                 if (newRegion.points.length > 0) {
-                     // If the only region is empty, replace it. Otherwise, append.
-                     if (regions.length === 1 && regions[0].points.length === 0) {
-                        regions = [newRegion];
-                        currentRegionIndex = 0;
-                    } else {
-                        regions.push(newRegion);
-                        currentRegionIndex = regions.length - 1;
-                    }
+                     if (regions.length === 1 && regions[0].points.length === 0) regions = [newRegion];
+                     else regions.push(newRegion);
+                     currentRegionIndex = regions.length - 1;
                 }
-                
-                highlightedRegionIndex = -1;
-                highlightedPointIndex = -1;
+                highlightedPoint = { regionIndex: -1, pointIndex: -1 };
+                selectedRegions.clear();
                 redraw();
                 updateCoordinatesTable();
             };
@@ -380,61 +371,59 @@
         }
 
         csvInput.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (file) {
-                handleFile(file);
-            }
-            e.target.value = ''; // Reset input to allow re-uploading the same file
+            if (e.target.files[0]) handleFile(e.target.files[0]);
+            e.target.value = '';
         });
 
         canvas.addEventListener('mousedown', (e) => {
-            if(e.shiftKey || e.button === 1) { // Pan with Shift+Drag or Middle Mouse
+            const foundPoint = findPointAt(e.clientX, e.clientY);
+            if(e.shiftKey || e.button === 1) {
                 isPanning = true;
                 panStart = { x: e.clientX, y: e.clientY };
                 canvas.style.cursor = 'grabbing';
+            } else if (foundPoint) {
+                draggedPoint = foundPoint;
+                isPanning = false;
             }
         });
 
         canvas.addEventListener('mousemove', (e) => {
             if (isPanning) {
-                const dx = e.clientX - panStart.x;
-                const dy = e.clientY - panStart.y;
-                panOffset.x += dx;
-                panOffset.y += dy;
+                panOffset.x += e.clientX - panStart.x;
+                panOffset.y += e.clientY - panStart.y;
                 panStart = { x: e.clientX, y: e.clientY };
                 redraw();
+            } else if (draggedPoint) {
+                const worldPos = getTransformedPoint(e.clientX, e.clientY);
+                regions[draggedPoint.regionIndex].points[draggedPoint.pointIndex].x = worldPos.x;
+                regions[draggedPoint.regionIndex].points[draggedPoint.pointIndex].y = worldPos.y;
+                redraw();
+                updateCoordinatesTable();
             }
         });
 
-        canvas.addEventListener('mouseup', (e) => {
+        canvas.addEventListener('mouseup', () => {
             isPanning = false;
+            draggedPoint = null;
             canvas.style.cursor = 'crosshair';
         });
         
-        canvas.addEventListener('mouseleave', (e) => {
-             if (isPanning) {
-                isPanning = false;
-                canvas.style.cursor = 'crosshair';
-            }
+        canvas.addEventListener('mouseleave', () => {
+            isPanning = false;
+            draggedPoint = null;
+            canvas.style.cursor = 'crosshair';
         });
 
         canvas.addEventListener('wheel', (e) => {
-            if (!e.ctrlKey) return;
             e.preventDefault();
             const zoomIntensity = 0.1;
-            const wheel = e.deltaY < 0 ? 1 : -1;
-            const zoom = Math.exp(wheel * zoomIntensity);
-
+            const zoom = Math.exp((e.deltaY < 0 ? 1 : -1) * zoomIntensity);
             const mousePos = getCanvasPoint(e);
             const pointBeforeZoom = getTransformedPoint(mousePos.x, mousePos.y);
-
             scale *= zoom;
-            
             const pointAfterZoom = getTransformedPoint(mousePos.x, mousePos.y);
-            
             panOffset.x += (pointAfterZoom.x - pointBeforeZoom.x) * scale;
             panOffset.y += (pointAfterZoom.y - pointBeforeZoom.y) * scale;
-            
             redraw();
         });
 
@@ -451,26 +440,22 @@
         zoomInBtn.addEventListener('click', () => applyZoom(1.2));
         zoomOutBtn.addEventListener('click', () => applyZoom(1 / 1.2));
 
-
         canvas.addEventListener('click', function(e) {
              if (clickTimer === null) {
                 clickTimer = setTimeout(() => {
                     clickTimer = null;
-                    if (isPanning) return;
-                    
-                    const canvasPos = getCanvasPoint(e);
-                    const worldPos = getTransformedPoint(canvasPos.x, canvasPos.y);
-
+                    if (isPanning || draggedPoint) return;
+                    const worldPos = getTransformedPoint(e.clientX, e.clientY);
                     if (regions.length === 0 || (regions[currentRegionIndex] && regions[currentRegionIndex].isClosed) ) {
                         regions.push({ points: [], isClosed: false });
                         currentRegionIndex = regions.length - 1;
+                        selectedRegions.clear();
+                        selectedRegions.add(currentRegionIndex);
                     }
-
                     regions[currentRegionIndex].points.push({ x: worldPos.x, y: worldPos.y, z:0 });
-                    
-                    highlightedRegionIndex = currentRegionIndex;
-                    highlightedPointIndex = regions[currentRegionIndex].points.length - 1;
-
+                    highlightedPoint = { regionIndex: currentRegionIndex, pointIndex: regions[currentRegionIndex].points.length - 1 };
+                    stopHighlightAnimation();
+                    startHighlightAnimation();
                     redraw();
                     updateCoordinatesTable();
                 }, 200);
@@ -485,8 +470,8 @@
             const currentRegion = regions[currentRegionIndex];
             if (currentRegion && currentRegion.points.length > 2 && !currentRegion.isClosed) {
                 currentRegion.isClosed = true;
-                highlightedRegionIndex = -1;
-                highlightedPointIndex = -1;
+                highlightedPoint = { regionIndex: -1, pointIndex: -1 };
+                stopHighlightAnimation();
                 redraw();
                 updateCoordinatesTable();
             }
@@ -496,15 +481,15 @@
             e.preventDefault();
             regions = [];
             currentRegionIndex = -1;
-            highlightedRegionIndex = -1;
-            highlightedPointIndex = -1;
+            selectedRegions.clear();
+            highlightedPoint = { regionIndex: -1, pointIndex: -1 };
             scale = 1.0;
-            panOffset = {x: 0, y: 0};
+            panOffset = { x: canvas.width / 2, y: canvas.height / 2 };
+            stopHighlightAnimation();
             redraw();
             updateCoordinatesTable();
         });
 
-        // Initial draw
         redraw();
     </script>
 </body>
