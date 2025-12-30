@@ -10,22 +10,81 @@
 </head>
 <body>
     <h1>座標プロットプログラム</h1>
-    <p>キャンバスをクリックすると点が描画されます。</p>
+    <p>
+        キャンバスをクリックして点をプロットし、線で繋ぎます。<br>
+        3点以上プロットした後にダブルクリックすると、領域が閉じられて色で塗りつぶされます。<br>
+        右クリックで全てのプロットをクリアします。
+    </p>
     <canvas id="plotCanvas" width="500" height="500"></canvas>
 
     <script>
         const canvas = document.getElementById('plotCanvas');
         const ctx = canvas.getContext('2d');
+        let points = [];
+        let isClosed = false;
+        let clickTimer = null;
+
+        function redraw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (points.length === 0) return;
+
+            // Draw lines
+            ctx.beginPath();
+            ctx.moveTo(points[0].x, points[0].y);
+            for (let i = 1; i < points.length; i++) {
+                ctx.lineTo(points[i].x, points[i].y);
+            }
+
+            if (isClosed) {
+                ctx.closePath();
+                ctx.fillStyle = 'rgba(173, 216, 230, 0.5)'; // Light blue fill
+                ctx.fill();
+                ctx.strokeStyle = 'blue';
+            } else {
+                ctx.strokeStyle = 'black';
+            }
+            ctx.stroke();
+
+            // Draw points
+            points.forEach(p => {
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 5, 0, 2 * Math.PI);
+                ctx.fillStyle = 'red';
+                ctx.fill();
+            });
+        }
 
         canvas.addEventListener('click', function(e) {
-            const rect = canvas.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const y = e.clientY - rect.top;
+            if (clickTimer === null) {
+                clickTimer = setTimeout(() => {
+                    clickTimer = null;
+                    if (isClosed) return;
 
-            ctx.beginPath();
-            ctx.arc(x, y, 5, 0, 2 * Math.PI);
-            ctx.fillStyle = 'red';
-            ctx.fill();
+                    const rect = canvas.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const y = e.clientY - rect.top;
+                    points.push({ x, y });
+                    redraw();
+                }, 200); // 200ms delay to wait for double click
+            } else {
+                clearTimeout(clickTimer);
+                clickTimer = null;
+            }
+        });
+
+        canvas.addEventListener('dblclick', function(e) {
+            if (points.length > 2) {
+                isClosed = true;
+                redraw();
+            }
+        });
+
+        canvas.addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+            points = [];
+            isClosed = false;
+            redraw();
         });
     </script>
 </body>
