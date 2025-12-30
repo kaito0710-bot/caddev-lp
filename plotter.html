@@ -3,8 +3,35 @@
 <head>
     <title>座標プロット</title>
     <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .main-container {
+            display: flex;
+            gap: 20px;
+        }
         canvas {
             border: 1px solid black;
+        }
+        #coordinates-container {
+            width: 200px;
+            height: 500px;
+            border: 1px solid #ccc;
+            padding: 10px;
+            overflow-y: auto;
+        }
+        #coordinates-list li {
+            cursor: pointer;
+            padding: 5px;
+            border-radius: 3px;
+        }
+        #coordinates-list li:hover {
+            background-color: #f0f0f0;
+        }
+        #coordinates-list li.highlighted {
+            background-color: #a0e0ff;
         }
     </style>
 </head>
@@ -13,19 +40,54 @@
     <p>
         キャンバスをクリックして点をプロットし、線で繋ぎます。<br>
         3点以上プロットした後にダブルクリックすると、領域が閉じられて色で塗りつぶされます。<br>
-        右クリックで全てのプロットをクリアします。
+        右クリックで全てのプロットをクリアします。<br>
+        右のリストの座標をクリックすると、対応する点がハイライトされます。
     </p>
-    <canvas id="plotCanvas" width="500" height="500"></canvas>
+    <div class="main-container">
+        <canvas id="plotCanvas" width="500" height="500"></canvas>
+        <div id="coordinates-container">
+            <h3>座標リスト</h3>
+            <ul id="coordinates-list"></ul>
+        </div>
+    </div>
 
     <script>
         const canvas = document.getElementById('plotCanvas');
         const ctx = canvas.getContext('2d');
+        const coordinatesList = document.getElementById('coordinates-list');
+        
         let points = [];
         let isClosed = false;
+        let highlightedIndex = -1;
         let clickTimer = null;
+
+        const origin = { x: canvas.width / 2, y: canvas.height / 2 };
+
+        function drawAxes() {
+            ctx.strokeStyle = '#ccc';
+            ctx.lineWidth = 1;
+
+            // X-axis
+            ctx.beginPath();
+            ctx.moveTo(0, origin.y);
+            ctx.lineTo(canvas.width, origin.y);
+            ctx.stroke();
+
+            // Y-axis
+            ctx.beginPath();
+            ctx.moveTo(origin.x, 0);
+            ctx.lineTo(origin.x, canvas.height);
+            ctx.stroke();
+
+            // Labels
+            ctx.fillStyle = '#ccc';
+            ctx.fillText('X', canvas.width - 10, origin.y - 5);
+            ctx.fillText('Y', origin.x + 5, 10);
+        }
 
         function redraw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawAxes();
 
             if (points.length === 0) return;
 
@@ -38,25 +100,57 @@
 
             if (isClosed) {
                 ctx.closePath();
-                ctx.fillStyle = 'rgba(173, 216, 230, 0.5)'; // Light blue fill
+                ctx.fillStyle = 'rgba(173, 216, 230, 0.5)';
                 ctx.fill();
                 ctx.strokeStyle = 'blue';
             } else {
                 ctx.strokeStyle = 'black';
             }
+            ctx.lineWidth = 1;
             ctx.stroke();
 
             // Draw points
-            points.forEach(p => {
+            points.forEach((p, index) => {
                 ctx.beginPath();
                 ctx.arc(p.x, p.y, 5, 0, 2 * Math.PI);
                 ctx.fillStyle = 'red';
                 ctx.fill();
+
+                if (index === highlightedIndex) {
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, 8, 0, 2 * Math.PI);
+                    ctx.strokeStyle = 'orange';
+                    ctx.lineWidth = 3;
+                    ctx.stroke();
+                }
+            });
+        }
+
+        function updateCoordinatesList() {
+            coordinatesList.innerHTML = '';
+            points.forEach((p, index) => {
+                const li = document.createElement('li');
+                const displayX = p.x - origin.x;
+                const displayY = origin.y - p.y;
+                li.textContent = `(${displayX.toFixed(2)}, ${displayY.toFixed(2)})`;
+                li.dataset.index = index;
+
+                if (index === highlightedIndex) {
+                    li.classList.add('highlighted');
+                }
+
+                li.addEventListener('click', () => {
+                    highlightedIndex = index;
+                    redraw();
+                    updateCoordinatesList();
+                });
+
+                coordinatesList.appendChild(li);
             });
         }
 
         canvas.addEventListener('click', function(e) {
-            if (clickTimer === null) {
+             if (clickTimer === null) {
                 clickTimer = setTimeout(() => {
                     clickTimer = null;
                     if (isClosed) return;
@@ -65,8 +159,12 @@
                     const x = e.clientX - rect.left;
                     const y = e.clientY - rect.top;
                     points.push({ x, y });
+                    
+                    highlightedIndex = points.length - 1;
+
                     redraw();
-                }, 200); // 200ms delay to wait for double click
+                    updateCoordinatesList();
+                }, 200);
             } else {
                 clearTimeout(clickTimer);
                 clickTimer = null;
@@ -76,7 +174,9 @@
         canvas.addEventListener('dblclick', function(e) {
             if (points.length > 2) {
                 isClosed = true;
+                highlightedIndex = -1; // Deselect on close
                 redraw();
+                updateCoordinatesList();
             }
         });
 
@@ -84,8 +184,13 @@
             e.preventDefault();
             points = [];
             isClosed = false;
+            highlightedIndex = -1;
             redraw();
+            updateCoordinatesList();
         });
+
+        // Initial draw
+        redraw();
     </script>
 </body>
 </html>
