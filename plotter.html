@@ -9,6 +9,12 @@
             align-items: center;
             font-family: sans-serif;
         }
+        .controls {
+            margin: 10px 0;
+            display: flex;
+            gap: 20px;
+            align-items: center;
+        }
         .main-container {
             display: flex;
             gap: 20px;
@@ -16,6 +22,7 @@
         }
         canvas {
             border: 1px solid black;
+            cursor: crosshair;
         }
         #coordinates-container {
             width: 350px;
@@ -39,6 +46,8 @@
         #coordinates-table td {
             text-align: left;
             white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
         #coordinates-table tbody tr:hover {
             background-color: #f0f0f0;
@@ -47,8 +56,10 @@
         #coordinates-table tbody tr.highlighted-row {
             background-color: #a0e0ff;
         }
-        .file-importer {
-            margin-top: 10px;
+        .zoom-controls button {
+            width: 30px;
+            height: 30px;
+            font-size: 18px;
         }
     </style>
 </head>
@@ -56,13 +67,20 @@
     <h1>座標プロットプログラム</h1>
     <p>
         キャンバスをクリックして点をプロットし、線で繋ぎます。<br>
+        <b>Ctrl + スクロール</b>で拡縮、<b>Shift + ドラッグ</b>でパンニングできます。<br>
         3点以上プロットした後にダブルクリックすると、領域が閉じられ、次のクリックから新しい領域の入力を開始できます。<br>
         右クリックで全てのプロットをクリアします。<br>
         右の表の座標をクリックすると、対応する点と領域がハイライトされます。
     </p>
-    <div class="file-importer">
-        <label for="csv-input">CSVファイル読み込み: </label>
-        <input type="file" id="csv-input" accept=".csv">
+    <div class="controls">
+        <div class="file-importer">
+            <label for="csv-input">CSVファイル読み込み: </label>
+            <input type="file" id="csv-input" accept=".csv">
+        </div>
+        <div class="zoom-controls">
+            <button id="zoom-in-btn">+</button>
+            <button id="zoom-out-btn">-</button>
+        </div>
     </div>
     <div class="main-container">
         <canvas id="plotCanvas" width="500" height="500"></canvas>
@@ -88,6 +106,8 @@
         const ctx = canvas.getContext('2d');
         const coordinatesTableBody = document.querySelector('#coordinates-table tbody');
         const csvInput = document.getElementById('csv-input');
+        const zoomInBtn = document.getElementById('zoom-in-btn');
+        const zoomOutBtn = document.getElementById('zoom-out-btn');
         
         let regions = [{ points: [], isClosed: false }];
         let currentRegionIndex = 0;
@@ -95,101 +115,126 @@
         let highlightedPointIndex = -1;
         let clickTimer = null;
 
+        // --- Pan and Zoom State ---
+        let scale = 1.0;
+        let panOffset = { x: 0, y: 0 };
+        let isPanning = false;
+        let panStart = { x: 0, y: 0 };
+        
         const gridSpacing = 20;
-        const origin = { 
-            x: Math.round(canvas.width / 2 / gridSpacing) * gridSpacing, 
-            y: Math.round(canvas.height / 2 / gridSpacing) * gridSpacing 
-        };
-        const tickSize = 5;
-        const tickLabelInterval = 5 * gridSpacing;
+        
+        function getCanvasPoint(event) {
+            const rect = canvas.getBoundingClientRect();
+            return {
+                x: event.clientX - rect.left,
+                y: event.clientY - rect.top
+            };
+        }
 
-        function drawGrid() {
+        function getTransformedPoint(canvasX, canvasY) {
+            return {
+                x: (canvasX - panOffset.x) / scale,
+                y: (canvasY - panOffset.y) / scale
+            };
+        }
+
+        function drawGridAndAxes() {
+            ctx.save();
+            ctx.lineWidth = 1 / scale;
+            
+            const tickLabelInterval = 5 * gridSpacing;
+
+            // --- Grid ---
             ctx.strokeStyle = '#e0e0e0';
-            ctx.lineWidth = 1;
+            const left = Math.floor(-panOffset.x / scale / gridSpacing) * gridSpacing;
+            const right = left + (canvas.width + 1) / scale;
+            const top = Math.floor(-panOffset.y / scale / gridSpacing) * gridSpacing;
+            const bottom = top + (canvas.height + 1) / scale;
 
-            // Grid lines
-            for (let x = 0; x <= canvas.width; x += gridSpacing) {
+            for (let x = left; x < right; x += gridSpacing) {
                 ctx.beginPath();
-                ctx.moveTo(x, 0);
-                ctx.lineTo(x, canvas.height);
+                ctx.moveTo(x, top);
+                ctx.lineTo(x, bottom);
                 ctx.stroke();
             }
-            for (let y = 0; y <= canvas.height; y += gridSpacing) {
+            for (let y = top; y < bottom; y += gridSpacing) {
                 ctx.beginPath();
-                ctx.moveTo(0, y);
-                ctx.lineTo(canvas.width, y);
+                ctx.moveTo(left, y);
+                ctx.lineTo(right, y);
                 ctx.stroke();
             }
-            
-            // Axes
+
+            // --- Axes ---
             ctx.strokeStyle = '#666';
-            ctx.lineWidth = 1;
             ctx.beginPath();
-            ctx.moveTo(0, origin.y);
-            ctx.lineTo(canvas.width, origin.y);
+            ctx.moveTo(left, 0);
+            ctx.lineTo(right, 0);
             ctx.stroke();
             ctx.beginPath();
-            ctx.moveTo(origin.x, 0);
-            ctx.lineTo(origin.x, canvas.height);
+            ctx.moveTo(0, top);
+            ctx.lineTo(0, bottom);
             ctx.stroke();
-            
-            // Axis Ticks and Labels
+
+            // --- Ticks and Labels ---
             ctx.fillStyle = '#333';
-            ctx.font = '10px sans-serif';
+            ctx.font = `${10 / scale}px sans-serif`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
 
             // X-axis ticks
-            for (let x = origin.x; x < canvas.width; x += gridSpacing) {
-                if ((x - origin.x) % tickLabelInterval === 0) {
+            for (let x = 0; x < right; x += gridSpacing) {
+                if (x % tickLabelInterval === 0 && x !== 0) {
                     ctx.beginPath();
-                    ctx.moveTo(x, origin.y - tickSize);
-                    ctx.lineTo(x, origin.y + tickSize);
+                    ctx.moveTo(x, -5/scale);
+                    ctx.lineTo(x, 5/scale);
                     ctx.stroke();
-                    if (x !== origin.x) ctx.fillText((x - origin.x), x, origin.y + 15);
+                    ctx.fillText(x, x, 15/scale);
                 }
             }
-            for (let x = origin.x; x > 0; x -= gridSpacing) {
-                 if ((origin.x - x) % tickLabelInterval === 0) {
+             for (let x = -gridSpacing; x > left; x -= gridSpacing) {
+                if (x % tickLabelInterval === 0) {
                     ctx.beginPath();
-                    ctx.moveTo(x, origin.y - tickSize);
-                    ctx.lineTo(x, origin.y + tickSize);
+                    ctx.moveTo(x, -5/scale);
+                    ctx.lineTo(x, 5/scale);
                     ctx.stroke();
-                    if (x !== origin.x) ctx.fillText((x - origin.x), x, origin.y + 15);
+                    ctx.fillText(x, x, 15/scale);
                 }
             }
 
             // Y-axis ticks
             ctx.textAlign = 'right';
-             for (let y = origin.y; y < canvas.height; y += gridSpacing) {
-                if ((y - origin.y) % tickLabelInterval === 0) {
-                    ctx.beginPath();
-                    ctx.moveTo(origin.x - tickSize, y);
-                    ctx.lineTo(origin.x + tickSize, y);
+            for (let y = 0; y < bottom; y += gridSpacing) {
+                if (y % tickLabelInterval === 0 && y !== 0) {
+                     ctx.beginPath();
+                    ctx.moveTo(-5/scale, y);
+                    ctx.lineTo(5/scale, y);
                     ctx.stroke();
-                     if (y !== origin.y) ctx.fillText(-(y - origin.y), origin.x - 10, y);
+                    ctx.fillText(-y, -10/scale, y);
                 }
             }
-            for (let y = origin.y; y > 0; y -= gridSpacing) {
-                if ((origin.y - y) % tickLabelInterval === 0) {
-                    ctx.beginPath();
-                    ctx.moveTo(origin.x - tickSize, y);
-                    ctx.lineTo(origin.x + tickSize, y);
+             for (let y = -gridSpacing; y > top; y -= gridSpacing) {
+                if (y % tickLabelInterval === 0) {
+                     ctx.beginPath();
+                    ctx.moveTo(-5/scale, y);
+                    ctx.lineTo(5/scale, y);
                     ctx.stroke();
-                    if (y !== origin.y) ctx.fillText(-(y - origin.y), origin.x - 10, y);
+                    ctx.fillText(-y, -10/scale, y);
                 }
             }
-            ctx.fillText('0', origin.x - 10, origin.y + 15);
-
-
-            ctx.fillStyle = '#666';
-            ctx.fillText('X', canvas.width - 10, origin.y - 15);
-            ctx.fillText('Y', origin.x + 15, 10);
+            ctx.fillText('0', -10/scale, 15/scale);
+            
+            ctx.restore();
         }
 
+
         function redraw() {
+            ctx.save();
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            drawGrid();
+            
+            ctx.translate(panOffset.x, panOffset.y);
+            ctx.scale(scale, scale);
+
+            drawGridAndAxes();
 
             regions.forEach((region, regionIndex) => {
                 if (region.points.length === 0) return;
@@ -200,6 +245,7 @@
                     ctx.lineTo(region.points[i].x, region.points[i].y);
                 }
 
+                ctx.lineWidth = (regionIndex === highlightedRegionIndex ? 2 : 1) / scale;
                 if (region.isClosed) {
                     ctx.closePath();
                     ctx.fillStyle = regionIndex === highlightedRegionIndex ? 'rgba(255, 165, 0, 0.5)' : 'rgba(173, 216, 230, 0.5)';
@@ -208,26 +254,24 @@
                 } else {
                      ctx.strokeStyle = regionIndex === highlightedRegionIndex ? 'orange' : 'black';
                 }
-                ctx.lineWidth = regionIndex === highlightedRegionIndex ? 2 : 1;
                 ctx.stroke();
             });
 
             regions.forEach((region, regionIndex) => {
                  region.points.forEach((p, pointIndex) => {
                     ctx.beginPath();
-                    ctx.arc(p.x, p.y, 5, 0, 2 * Math.PI);
+                    ctx.arc(p.x, p.y, 5 / scale, 0, 2 * Math.PI);
                     ctx.fillStyle = 'red';
                     ctx.fill();
 
                     if (regionIndex === highlightedRegionIndex && pointIndex === highlightedPointIndex) {
-                        ctx.beginPath();
-                        ctx.arc(p.x, p.y, 8, 0, 2 * Math.PI);
+                        ctx.lineWidth = 3 / scale;
                         ctx.strokeStyle = '#ff4500';
-                        ctx.lineWidth = 3;
                         ctx.stroke();
                     }
                 });
             });
+            ctx.restore();
         }
 
         function updateCoordinatesTable() {
@@ -236,21 +280,17 @@
                 region.points.forEach((p, pointIndex) => {
                     const row = document.createElement('tr');
                     
-                    const displayX = p.x - origin.x;
-                    const displayY = origin.y - p.y;
-                    const displayZ = p.z || 0;
-
                     row.innerHTML = `
                         <td style="text-align:center;">${regionIndex + 1}</td>
                         <td style="text-align:center;">${pointIndex + 1}</td>
-                        <td>${displayX.toFixed(1)}</td>
-                        <td>${displayY.toFixed(1)}</td>
-                        <td>${displayZ.toFixed(1)}</td>
+                        <td>${(p.x).toFixed(1)}</td>
+                        <td>${(-p.y).toFixed(1)}</td>
+                        <td>${(p.z || 0).toFixed(1)}</td>
                     `;
                     row.dataset.regionIndex = regionIndex;
                     row.dataset.pointIndex = pointIndex;
 
-                    if (regionIndex === highlightedRegionIndex) {
+                    if (regionIndex === highlightedRegionIndex && pointIndex === highlightedPointIndex) {
                         row.classList.add('highlighted-row');
                     }
 
@@ -270,22 +310,34 @@
             const reader = new FileReader();
             reader.onload = (e) => {
                 const text = e.target.result;
-                const newRegions = [{ points: [], isClosed: false }];
-                let currentParseRegion = 0;
+                const newRegion = { points: [], isClosed: false };
                 
                 const lines = text.split(/\r\n|\n/);
-                lines.forEach(line => {
+                // Skip header if it exists
+                const startLine = (lines[0] && isNaN(parseFloat(lines[0].split(',')[0]))) ? 1 : 0;
+
+                for(let i = startLine; i < lines.length; i++) {
+                    const line = lines[i];
+                    if (!line.trim()) continue;
                     const values = line.split(',').map(v => parseFloat(v.trim()));
                     if (values.length >= 2 && !isNaN(values[0]) && !isNaN(values[1])) {
-                        const x = origin.x + values[0];
-                        const y = origin.y - values[1];
+                        const x = values[0];
+                        const y = -values[1]; // Negate Y for correct display
                         const z = values.length > 2 ? values[2] : 0;
-                        newRegions[currentParseRegion].points.push({ x, y, z });
+                        newRegion.points.push({ x, y, z });
                     }
-                });
+                }
+
+                if (newRegion.points.length > 0) {
+                     if (regions.length === 1 && regions[0].points.length === 0) {
+                        regions = [newRegion];
+                        currentRegionIndex = 0;
+                    } else {
+                        regions.push(newRegion);
+                        currentRegionIndex = regions.length - 1;
+                    }
+                }
                 
-                regions = newRegions;
-                currentRegionIndex = regions.length - 1;
                 highlightedRegionIndex = -1;
                 highlightedPointIndex = -1;
                 redraw();
@@ -299,24 +351,89 @@
             if (file) {
                 handleFile(file);
             }
+            e.target.value = ''; // Reset input to allow re-uploading the same file
         });
+
+        canvas.addEventListener('mousedown', (e) => {
+            if(e.shiftKey || e.button === 1) { // Pan with Shift+Drag or Middle Mouse
+                isPanning = true;
+                panStart = { x: e.clientX, y: e.clientY };
+                canvas.style.cursor = 'grabbing';
+            }
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (isPanning) {
+                const dx = e.clientX - panStart.x;
+                const dy = e.clientY - panStart.y;
+                panOffset.x += dx;
+                panOffset.y += dy;
+                panStart = { x: e.clientX, y: e.clientY };
+                redraw();
+            }
+        });
+
+        canvas.addEventListener('mouseup', (e) => {
+            isPanning = false;
+            canvas.style.cursor = 'crosshair';
+        });
+        
+        canvas.addEventListener('mouseleave', (e) => {
+             if (isPanning) {
+                isPanning = false;
+                canvas.style.cursor = 'crosshair';
+            }
+        });
+
+        canvas.addEventListener('wheel', (e) => {
+            if (!e.ctrlKey) return;
+            e.preventDefault();
+            const zoomIntensity = 0.1;
+            const wheel = e.deltaY < 0 ? 1 : -1;
+            const zoom = Math.exp(wheel * zoomIntensity);
+
+            const mousePos = getCanvasPoint(e);
+            const pointBeforeZoom = getTransformedPoint(mousePos.x, mousePos.y);
+
+            scale *= zoom;
+            
+            const pointAfterZoom = getTransformedPoint(mousePos.x, mousePos.y);
+            
+            panOffset.x += (pointAfterZoom.x - pointBeforeZoom.x) * scale;
+            panOffset.y += (pointAfterZoom.y - pointBeforeZoom.y) * scale;
+            
+            redraw();
+        });
+
+        function applyZoom(zoomFactor) {
+             const center = { x: canvas.width / 2, y: canvas.height / 2};
+             const pointBeforeZoom = getTransformedPoint(center.x, center.y);
+             scale *= zoomFactor;
+             const pointAfterZoom = getTransformedPoint(center.x, center.y);
+             panOffset.x += (pointAfterZoom.x - pointBeforeZoom.x) * scale;
+             panOffset.y += (pointAfterZoom.y - pointBeforeZoom.y) * scale;
+             redraw();
+        }
+
+        zoomInBtn.addEventListener('click', () => applyZoom(1.2));
+        zoomOutBtn.addEventListener('click', () => applyZoom(1 / 1.2));
 
 
         canvas.addEventListener('click', function(e) {
              if (clickTimer === null) {
                 clickTimer = setTimeout(() => {
                     clickTimer = null;
+                    if (isPanning) return;
                     
-                    const rect = canvas.getBoundingClientRect();
-                    const x = e.clientX - rect.left;
-                    const y = e.clientY - rect.top;
+                    const canvasPos = getCanvasPoint(e);
+                    const worldPos = getTransformedPoint(canvasPos.x, canvasPos.y);
 
-                    if (regions.length === 0 || regions[currentRegionIndex].isClosed) {
+                    if (regions.length === 0 || (regions[currentRegionIndex] && regions[currentRegionIndex].isClosed) ) {
                         regions.push({ points: [], isClosed: false });
                         currentRegionIndex = regions.length - 1;
                     }
 
-                    regions[currentRegionIndex].points.push({ x, y, z:0 });
+                    regions[currentRegionIndex].points.push({ x: worldPos.x, y: worldPos.y, z:0 });
                     
                     highlightedRegionIndex = currentRegionIndex;
                     highlightedPointIndex = regions[currentRegionIndex].points.length - 1;
@@ -333,7 +450,7 @@
         canvas.addEventListener('dblclick', function(e) {
             if (currentRegionIndex >= regions.length) return;
             const currentRegion = regions[currentRegionIndex];
-            if (currentRegion.points.length > 2 && !currentRegion.isClosed) {
+            if (currentRegion && currentRegion.points.length > 2 && !currentRegion.isClosed) {
                 currentRegion.isClosed = true;
                 highlightedRegionIndex = -1;
                 highlightedPointIndex = -1;
@@ -344,10 +461,12 @@
 
         canvas.addEventListener('contextmenu', function(e) {
             e.preventDefault();
-            regions = [{ points: [], isClosed: false }];
-            currentRegionIndex = 0;
+            regions = [];
+            currentRegionIndex = -1;
             highlightedRegionIndex = -1;
             highlightedPointIndex = -1;
+            scale = 1.0;
+            panOffset = {x: 0, y: 0};
             redraw();
             updateCoordinatesTable();
         });
@@ -357,3 +476,4 @@
     </script>
 </body>
 </html>
+
