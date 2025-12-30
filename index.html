@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>住宅CAD開発LP - 未来の住まいをデザイン</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <style>
+        html {
+            scroll-behavior: smooth;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            color: #333;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        header {
+            background-color: #0056b3;
+            color: white;
+            padding: 1rem 0;
+            text-align: center;
+        }
+        header h1 {
+            margin: 0;
+            font-size: 2.5em;
+        }
+        nav ul {
+            list-style: none;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-top: 10px;
+        }
+        nav a {
+            color: white;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        .hero {
+            background: url('https://i.imgur.com/kYq3NfH.jpeg') no-repeat center center;
+            background-size: cover;
+            padding: 100px 20px;
+            text-align: center;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.7);
+        }
+        .hero h2, .hero p {
+            color: #fff;
+        }
+        .btn {
+            background-color: #28a745;
+            color: white;
+            padding: 15px 30px;
+            text-decoration: none;
+            border-radius: 5px;
+            font-size: 1.1em;
+            transition: background-color 0.3s ease;
+        }
+        .btn:hover {
+            background-color: #218838;
+        }
+        .section {
+            padding: 40px 0;
+            border-bottom: 1px solid #eee;
+        }
+        .section h3 {
+            font-size: 2em;
+            color: #0056b3;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            text-align: center;
+        }
+        .feature-item {
+            background: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease-in-out;
+        }
+
+        .feature-item:hover {
+            transform: scale(1.05);
+        }
+
+        .feature-item h4 {
+            color: #0056b3;
+            font-size: 1.5em;
+            margin-bottom: 10px;
+        }
+        .about-us, .contact {
+            text-align: center;
+        }
+                footer {
+                    background-color: #333;
+                    color: white;
+                    text-align: center;
+                    padding: 20px 0;
+                    margin-top: 30px;
+                }
+        
+                #scrollTopBtn {
+                    display: none;
+                    position: fixed;
+                    bottom: 20px;
+                    right: 30px;
+                    z-index: 99;
+                    border: none;
+                    outline: none;
+                    background-color: #0056b3;
+                    color: white;
+                    cursor: pointer;
+                    padding: 15px;
+                    border-radius: 50%;
+                    font-size: 18px;
+                    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+                }
+        
+                #scrollTopBtn:hover {
+                    background-color: #003d82;
+                }
+            </style>
+        </head>
+        <body>
+            <header>
+                <div class="container">
+                    <h1>住宅CAD開発ソリューション</h1>
+                    <nav>
+                        <ul>
+                            <li><a href="#features">特長</a></li>
+                            <li><a href="#bim-explanation">BIMとは？</a></li>
+                            <li><a href="#benefits">導入メリット</a></li>
+                            <li><a href="#about">会社概要</a></li>
+                            <li><a href="#contact">お問い合わせ</a></li>
+                        </ul>
+                    </nav>
+                </div>
+            </header>
+        
+            <main>
+                <section class="hero">
+                    <div class="container">
+                        <h2>あなたの描く理想の住まいを、現実に。</h2>
+                        <p>最先端の住宅CAD開発技術で、設計から施工までを一元管理。効率化と品質向上を実現します。</p>
+                        <a href="#contact" class="btn">今すぐお問い合わせ</a>
+                    </div>
+                </section>
+        
+                <section id="features" class="section">
+                    <div class="container">
+                        <h3>私たちのCAD開発ソリューションの特長</h3>
+                        <div class="features-grid">
+                            <div class="feature-item">
+                                <h4><i class="fa-solid fa-computer-mouse"></i> 直感的な操作性</h4>
+                                <p>初心者からプロフェッショナルまで、誰もが簡単に扱えるユーザーインターフェースを追求。</p>
+                            </div>
+                            <div class="feature-item">
+                                <h4><i class="fa-solid fa-ruler-combined"></i> 高精度な設計機能</h4>
+                                <p>ミリ単位の精度で、複雑な建築構造も正確に再現。設計ミスを大幅に削減します。</p>
+                            </div>
+                            <div class="feature-item">
+                                <h4><i class="fa-solid fa-swatchbook"></i> 豊富なライブラリ</h4>
+                                <p>建材から家具まで、多種多様な3Dモデルを標準搭載。設計の幅が無限に広がります。</p>
+                            </div>
+                            <div class="feature-item">
+                                <h4><i class="fa-solid fa-cubes"></i> BIM連携対応</h4>
+                                <p>BIMデータとのシームレスな連携で、情報共有とプロジェクト管理を強力にサポート。</p>
+                            </div>
+                            <div class="feature-item">
+                                <h4><i class="fa-solid fa-gears"></i> カスタマイズ可能</h4>
+                                <p>お客様の特定のニーズに合わせて、機能を柔軟にカスタマイズできます。</p>
+                            </div>
+                            <div class="feature-item">
+                                <h4><i class="fa-solid fa-bolt"></i> 高速レンダリング</h4>
+                                <p>高品質なパースを短時間で生成。顧客へのプレゼンテーション効果を最大化します。</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+        
+                <section id="bim-explanation" class="section" style="background-color: #e0f2f7;">
+                    <div class="container">
+                        <h3><i class="fa-solid fa-building-user"></i> BIMとは？</h3>
+                        <p>BIM（Building Information Modeling）とは、コンピューター上に現実と同じ建物の3Dモデルを構築し、建築物の設計から施工、維持管理に至るまでのライフサイクル全体で、形状情報とそれに紐づく属性情報（部材、仕様、コストなど）を一元的に管理する仕組みです。これにより、建築に関わる全ての情報が統合され、プロジェクトの透明性と効率性が飛躍的に向上します。</p>
+                        <div class="features-grid">
+                            <div class="feature-item">
+                                <h4>設計の効率化と整合性の確保</h4>
+                                <p>設計変更を行うと、関連する全ての図面やデータが自動的に更新されるため、手作業による修正漏れや不整合を防ぎ、常に一貫性のある設計を維持できます。</p>
+                            </div>
+                            <div class="feature-item">
+                                <h4>コストと工期の最適化</h4>
+                                <p>正確な数量算出によるコストの可視化や、施工段階での手戻りを防ぐシミュレーションにより、無駄な費用を削減し、工期全体の短縮に貢献します。</p>
+                            </div>
+                            <div class="feature-item">
+                                <h4>関係者間のスムーズな合意形成</h4>
+                                <p>3Dモデルを通じて、施主や施工業者など、すべての関係者が建物の完成イメージを直感的に理解できます。これにより、認識のズレを防ぎ、迅速で的確な合意形成を促進します。</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+        
+                <section id="benefits" class="section">
+                    <div class="container">
+                        <h3>導入メリット</h3>
+                        <div class="features-grid">
+                            <div class="feature-item">
+                                <h4><i class="fa-solid fa-wallet"></i> コスト削減</h4>
+                                <p>設計時間の短縮とミスの削減により、プロジェクト全体のコストを大幅に抑制。</p>
+                            </div>
+                            <div class="feature-item">
+                                <h4><i class="fa-solid fa-chart-line"></i> 生産性向上</h4>
+                                <p>自動化された作業と効率的なワークフローで、設計から施工までの生産性を向上。</p>
+                            </div>
+                            <div class="feature-item">
+                                <h4><i class="fa-solid fa-people-group"></i> 顧客満足度向上</h4>
+                                <p>リアルな3Dパースで、顧客のイメージを具体化。スムーズな合意形成を促進します。</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+        
+                <section id="about" class="section about-us">
+                    <div class="container">
+                        <h3>会社概要</h3>
+                        <p>私たちは、住宅設計・建築業界のデジタル化を推進するため、革新的なCADソフトウェアの開発に取り組んでいます。お客様のビジネスを加速させる最高のソリューションを提供することが私たちの使命です。</p>
+                        <p>詳細情報については、お気軽にお問い合わせください。</p>
+                    </div>
+                </section>
+        
+                <section id="contact" class="section contact">
+                    <div class="container">
+                        <h3>お問い合わせ</h3>
+                        <p>弊社の住宅CAD開発ソリューションにご興味をお持ちいただけましたでしょうか？<br>
+                        ご質問やご相談、資料請求など、お気軽にお問い合わせください。</p>
+                        <p><strong>電話番号:</strong> 03-XXXX-XXXX</p>
+                        <p><strong>メール:</strong> info@example.com</p>
+                        <form action="#" method="POST" style="max-width: 500px; margin: 30px auto; text-align: left;">
+                            <p>
+                                <label for="name">お名前:</label><br>
+                                <input type="text" id="name" name="name" required style="width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ddd; border-radius: 4px;">
+                            </p>
+                            <p>
+                                <label for="email">メールアドレス:</label><br>
+                                <input type="email" id="email" name="email" required style="width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ddd; border-radius: 4px;">
+                            </p>
+                            <p>
+                                <label for="message">お問い合わせ内容:</label><br>
+                                <textarea id="message" name="message" rows="6" required style="width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ddd; border-radius: 4px;"></textarea>
+                            </p>
+                            <button type="submit" class="btn" style="width: 100%; border: none; cursor: pointer; margin-top: 20px;">送信</button>
+                        </form>
+                    </div>
+                </section>
+            </main>
+        
+            <footer>
+                <div class="container">
+                    <p>&copy; 2025 住宅CAD開発ソリューション. All rights reserved.</p>
+                </div>
+            </footer>
+        
+            <button id="scrollTopBtn" title="トップへ戻る"><i class="fa-solid fa-arrow-up"></i></button>
+        
+            <script>
+                // "scroll to top" button
+                const scrollTopBtn = document.getElementById("scrollTopBtn");
+        
+                window.onscroll = function() {
+                    scrollFunction();
+                };
+        
+                function scrollFunction() {
+                    if (document.body.scrollTop > 20 || document.documentElement.scrollTop > 20) {
+                        scrollTopBtn.style.display = "block";
+                    } else {
+                        scrollTopBtn.style.display = "none";
+                    }
+                }
+        
+                scrollTopBtn.addEventListener("click", function() {
+                    document.body.scrollTop = 0; // For Safari
+                    document.documentElement.scrollTop = 0; // For Chrome, Firefox, IE and Opera
+                });
+            </script>
+        </body>
+        </html>
