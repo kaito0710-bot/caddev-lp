@@ -7,6 +7,7 @@
             display: flex;
             flex-direction: column;
             align-items: center;
+            font-family: sans-serif;
         }
         .main-container {
             display: flex;
@@ -16,21 +17,28 @@
             border: 1px solid black;
         }
         #coordinates-container {
-            width: 200px;
+            width: 350px;
             height: 500px;
             border: 1px solid #ccc;
-            padding: 10px;
             overflow-y: auto;
         }
-        #coordinates-list li {
-            cursor: pointer;
-            padding: 5px;
-            border-radius: 3px;
+        #coordinates-table {
+            width: 100%;
+            border-collapse: collapse;
         }
-        #coordinates-list li:hover {
+        #coordinates-table th, #coordinates-table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: center;
+        }
+        #coordinates-table th {
+            background-color: #f2f2f2;
+        }
+        #coordinates-table tbody tr:hover {
             background-color: #f0f0f0;
+            cursor: pointer;
         }
-        #coordinates-list li.highlighted {
+        #coordinates-table tbody tr.highlighted-row {
             background-color: #a0e0ff;
         }
     </style>
@@ -39,113 +47,153 @@
     <h1>座標プロットプログラム</h1>
     <p>
         キャンバスをクリックして点をプロットし、線で繋ぎます。<br>
-        3点以上プロットした後にダブルクリックすると、領域が閉じられて色で塗りつぶされます。<br>
+        3点以上プロットした後にダブルクリックすると、領域が閉じられ、次のクリックから新しい領域の入力を開始できます。<br>
         右クリックで全てのプロットをクリアします。<br>
-        右のリストの座標をクリックすると、対応する点がハイライトされます。
+        右の表の座標をクリックすると、対応する点と領域がハイライトされます。
     </p>
     <div class="main-container">
         <canvas id="plotCanvas" width="500" height="500"></canvas>
         <div id="coordinates-container">
             <h3>座標リスト</h3>
-            <ul id="coordinates-list"></ul>
+            <table id="coordinates-table">
+                <thead>
+                    <tr>
+                        <th>領域</th>
+                        <th>点</th>
+                        <th>X</th>
+                        <th>Y</th>
+                        <th>Z</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
         </div>
     </div>
 
     <script>
         const canvas = document.getElementById('plotCanvas');
         const ctx = canvas.getContext('2d');
-        const coordinatesList = document.getElementById('coordinates-list');
+        const coordinatesTableBody = document.querySelector('#coordinates-table tbody');
         
-        let points = [];
-        let isClosed = false;
-        let highlightedIndex = -1;
+        let regions = [{ points: [], isClosed: false }];
+        let currentRegionIndex = 0;
+        let highlightedRegionIndex = -1;
+        let highlightedPointIndex = -1;
         let clickTimer = null;
 
         const origin = { x: canvas.width / 2, y: canvas.height / 2 };
+        const gridSpacing = 20;
 
-        function drawAxes() {
-            ctx.strokeStyle = '#ccc';
+        function drawGrid() {
+            ctx.strokeStyle = '#e0e0e0';
             ctx.lineWidth = 1;
 
-            // X-axis
+            // Vertical lines
+            for (let x = 0; x <= canvas.width; x += gridSpacing) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, canvas.height);
+                ctx.stroke();
+            }
+            // Horizontal lines
+            for (let y = 0; y <= canvas.height; y += gridSpacing) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(canvas.width, y);
+                ctx.stroke();
+            }
+            
+            // Axes
+            ctx.strokeStyle = '#999';
             ctx.beginPath();
             ctx.moveTo(0, origin.y);
             ctx.lineTo(canvas.width, origin.y);
             ctx.stroke();
-
-            // Y-axis
             ctx.beginPath();
             ctx.moveTo(origin.x, 0);
             ctx.lineTo(origin.x, canvas.height);
             ctx.stroke();
-
-            // Labels
-            ctx.fillStyle = '#ccc';
+            
+            ctx.fillStyle = '#999';
             ctx.fillText('X', canvas.width - 10, origin.y - 5);
             ctx.fillText('Y', origin.x + 5, 10);
         }
 
         function redraw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            drawAxes();
+            drawGrid();
 
-            if (points.length === 0) return;
+            regions.forEach((region, regionIndex) => {
+                if (region.points.length === 0) return;
 
-            // Draw lines
-            ctx.beginPath();
-            ctx.moveTo(points[0].x, points[0].y);
-            for (let i = 1; i < points.length; i++) {
-                ctx.lineTo(points[i].x, points[i].y);
-            }
-
-            if (isClosed) {
-                ctx.closePath();
-                ctx.fillStyle = 'rgba(173, 216, 230, 0.5)';
-                ctx.fill();
-                ctx.strokeStyle = 'blue';
-            } else {
-                ctx.strokeStyle = 'black';
-            }
-            ctx.lineWidth = 1;
-            ctx.stroke();
-
-            // Draw points
-            points.forEach((p, index) => {
                 ctx.beginPath();
-                ctx.arc(p.x, p.y, 5, 0, 2 * Math.PI);
-                ctx.fillStyle = 'red';
-                ctx.fill();
-
-                if (index === highlightedIndex) {
-                    ctx.beginPath();
-                    ctx.arc(p.x, p.y, 8, 0, 2 * Math.PI);
-                    ctx.strokeStyle = 'orange';
-                    ctx.lineWidth = 3;
-                    ctx.stroke();
+                ctx.moveTo(region.points[0].x, region.points[0].y);
+                for (let i = 1; i < region.points.length; i++) {
+                    ctx.lineTo(region.points[i].x, region.points[i].y);
                 }
+
+                if (region.isClosed) {
+                    ctx.closePath();
+                    ctx.fillStyle = regionIndex === highlightedRegionIndex ? 'rgba(255, 165, 0, 0.5)' : 'rgba(173, 216, 230, 0.5)';
+                    ctx.fill();
+                    ctx.strokeStyle = regionIndex === highlightedRegionIndex ? 'orange' : 'blue';
+                } else {
+                     ctx.strokeStyle = regionIndex === highlightedRegionIndex ? 'orange' : 'black';
+                }
+                ctx.lineWidth = regionIndex === highlightedRegionIndex ? 2 : 1;
+                ctx.stroke();
+            });
+
+            regions.forEach((region, regionIndex) => {
+                 region.points.forEach((p, pointIndex) => {
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, 5, 0, 2 * Math.PI);
+                    ctx.fillStyle = 'red';
+                    ctx.fill();
+
+                    if (regionIndex === highlightedRegionIndex && pointIndex === highlightedPointIndex) {
+                        ctx.beginPath();
+                        ctx.arc(p.x, p.y, 8, 0, 2 * Math.PI);
+                        ctx.strokeStyle = '#ff4500';
+                        ctx.lineWidth = 3;
+                        ctx.stroke();
+                    }
+                });
             });
         }
 
-        function updateCoordinatesList() {
-            coordinatesList.innerHTML = '';
-            points.forEach((p, index) => {
-                const li = document.createElement('li');
-                const displayX = p.x - origin.x;
-                const displayY = origin.y - p.y;
-                li.textContent = `(${displayX.toFixed(2)}, ${displayY.toFixed(2)})`;
-                li.dataset.index = index;
+        function updateCoordinatesTable() {
+            coordinatesTableBody.innerHTML = '';
+            regions.forEach((region, regionIndex) => {
+                region.points.forEach((p, pointIndex) => {
+                    const row = document.createElement('tr');
+                    
+                    const displayX = p.x - origin.x;
+                    const displayY = origin.y - p.y;
 
-                if (index === highlightedIndex) {
-                    li.classList.add('highlighted');
-                }
+                    row.innerHTML = `
+                        <td>${regionIndex + 1}</td>
+                        <td>${pointIndex + 1}</td>
+                        <td>${displayX.toFixed(2)}</td>
+                        <td>${displayY.toFixed(2)}</td>
+                        <td>0.00</td>
+                    `;
+                    row.dataset.regionIndex = regionIndex;
+                    row.dataset.pointIndex = pointIndex;
 
-                li.addEventListener('click', () => {
-                    highlightedIndex = index;
-                    redraw();
-                    updateCoordinatesList();
+                    if (regionIndex === highlightedRegionIndex) {
+                        row.classList.add('highlighted-row');
+                    }
+
+                    row.addEventListener('click', () => {
+                        highlightedRegionIndex = regionIndex;
+                        highlightedPointIndex = pointIndex;
+                        redraw();
+                        updateCoordinatesTable();
+                    });
+
+                    coordinatesTableBody.appendChild(row);
                 });
-
-                coordinatesList.appendChild(li);
             });
         }
 
@@ -153,17 +201,24 @@
              if (clickTimer === null) {
                 clickTimer = setTimeout(() => {
                     clickTimer = null;
-                    if (isClosed) return;
-
+                    
                     const rect = canvas.getBoundingClientRect();
                     const x = e.clientX - rect.left;
                     const y = e.clientY - rect.top;
-                    points.push({ x, y });
+
+                    // If the current region is closed, start a new one
+                    if(regions[currentRegionIndex].isClosed) {
+                        regions.push({ points: [], isClosed: false });
+                        currentRegionIndex++;
+                    }
+
+                    regions[currentRegionIndex].points.push({ x, y });
                     
-                    highlightedIndex = points.length - 1;
+                    highlightedRegionIndex = currentRegionIndex;
+                    highlightedPointIndex = regions[currentRegionIndex].points.length - 1;
 
                     redraw();
-                    updateCoordinatesList();
+                    updateCoordinatesTable();
                 }, 200);
             } else {
                 clearTimeout(clickTimer);
@@ -172,21 +227,24 @@
         });
 
         canvas.addEventListener('dblclick', function(e) {
-            if (points.length > 2) {
-                isClosed = true;
-                highlightedIndex = -1; // Deselect on close
+            const currentRegion = regions[currentRegionIndex];
+            if (currentRegion.points.length > 2 && !currentRegion.isClosed) {
+                currentRegion.isClosed = true;
+                highlightedRegionIndex = -1;
+                highlightedPointIndex = -1;
                 redraw();
-                updateCoordinatesList();
+                updateCoordinatesTable();
             }
         });
 
         canvas.addEventListener('contextmenu', function(e) {
             e.preventDefault();
-            points = [];
-            isClosed = false;
-            highlightedIndex = -1;
+            regions = [{ points: [], isClosed: false }];
+            currentRegionIndex = 0;
+            highlightedRegionIndex = -1;
+            highlightedPointIndex = -1;
             redraw();
-            updateCoordinatesList();
+            updateCoordinatesTable();
         });
 
         // Initial draw
